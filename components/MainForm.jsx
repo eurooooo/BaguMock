@@ -5,47 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Loader2, FileText, MessageSquare } from "lucide-react";
-import { generateContent } from "@/lib/generate-content";
-import { generateAudio } from "@/lib/generate-audio";
-import { AudioPlayer } from "./AudioPlayer";
-
+import { Loader2, FileText } from "lucide-react";
+import { z } from "zod";
+import { experimental_useObject as useObject } from "@ai-sdk/react";
+import { notificationSchema } from "@/app/api/use-object/schema";
 export function MainForm() {
   const [inputText, setInputText] = useState("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState("");
-  const [dialogue, setDialogue] = useState("");
-  const [audioUrl, setAudioUrl] = useState("");
-
-  async function handleSubmit(e) {
-    e.preventDefault();
-    if (!inputText.trim()) return;
-
-    setIsGenerating(true);
-    setError("");
-    setDialogue("");
-    setAudioUrl("");
-
-    try {
-      // Generate dialogue from input text
-      const generatedDialogue = await generateContent(inputText);
-      setDialogue(generatedDialogue);
-
-      // Generate speech from dialogue
-      const audio = await generateAudio(generatedDialogue);
-      setAudioUrl(audio);
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "生成对话时出错，请稍后重试"
-      );
-    } finally {
-      setIsGenerating(false);
-    }
-  }
+  const { object, submit, isLoading, stop } = useObject({
+    api: "/api/use-object",
+    schema: z.array(notificationSchema),
+  });
 
   return (
     <div className="space-y-8">
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-4">
         <Card className="p-6">
           <div className="mb-4">
             <Label
@@ -61,16 +34,18 @@ export function MainForm() {
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               className="min-h-[200px] resize-y"
-              disabled={isGenerating}
+              disabled={isLoading}
             />
           </div>
 
           <Button
-            type="submit"
-            disabled={isGenerating || !inputText.trim()}
+            disabled={isLoading || !inputText.trim()}
             className="w-full"
+            onClick={() => {
+              submit(inputText);
+            }}
           >
-            {isGenerating ? (
+            {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                 生成中...
@@ -80,26 +55,25 @@ export function MainForm() {
             )}
           </Button>
         </Card>
-      </form>
+      </div>
 
-      {error && (
-        <div className="bg-destructive/10 text-destructive p-4 rounded-md">
-          {error}
+      {object && (
+        <div className="space-y-4 mt-8">
+          <h2 className="text-xl font-semibold mb-4">
+            生成的面试对话（{object.length}条）
+          </h2>
+          {object.map((notification, index) => (
+            <div
+              key={index}
+              className="bg-white p-4 rounded-lg shadow border border-gray-200 hover:shadow-md transition-shadow"
+            >
+              <p className="font-medium text-lg text-gray-800 mb-1">
+                {notification?.name}
+              </p>
+              <p className="text-gray-600">{notification?.message}</p>
+            </div>
+          ))}
         </div>
-      )}
-
-      {dialogue && (
-        <Card className="p-6">
-          <Label className="text-base font-medium flex items-center gap-2 mb-4">
-            <MessageSquare className="h-4 w-4" />
-            生成的对话
-          </Label>
-          <div className="whitespace-pre-wrap bg-muted p-4 rounded-md max-h-[400px] overflow-y-auto text-sm mb-6">
-            {dialogue}
-          </div>
-
-          {audioUrl && <AudioPlayer url={audioUrl} />}
-        </Card>
       )}
     </div>
   );
